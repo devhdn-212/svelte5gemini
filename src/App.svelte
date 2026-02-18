@@ -7,49 +7,43 @@
 
   const repo = new ApiTodoRepository();
   const todoApp = createTodoStore(repo);
-
-  // Bagikan store ke seluruh anak komponen
   setTodoContext(todoApp);
 
-  let inputTitle = $state("");
-  let editingId = $state<number | null>(null);
+  $effect(() => {
+    const handleFocus = () => todoApp.load(false);
+    window.addEventListener('focus', handleFocus);
+  
+    // 1. Load data pertama kali
+    todoApp.load();
 
-  // Logic input tetap di sini karena ini urusan Form di App.svelte
-  async function handleSubmit() {
-    const success = editingId !== null 
-      ? await todoApp.update(editingId, inputTitle)
-      : await todoApp.add(inputTitle);
-      
-    if (success) {
-      inputTitle = "";
-      editingId = null;
-    }
-  }
+    // 2. Jalankan Auto-Refresh setiap 30 detik
+    const stopPolling = todoApp.startPolling(30000);
 
-  function startEdit(todo: any) {
-    editingId = todo.id;
-    inputTitle = todo.title;
-  }
+    // 3. Svelte 5 Cleanup: Otomatis berhenti jika user pindah halaman/tutup app
+    return () => {
+      stopPolling();
+      window.removeEventListener('focus', handleFocus);
+    };
+  });
 </script>
 
 <Toaster richColors />
 
 <main>
-  <h1>Clean Arch + Context API</h1>
+  <h1>Clean Arch Ultimate</h1>
+  <h2>Todo Auto-Sync 🔄</h2>
   
   <div class="form">
-    <input bind:value={inputTitle} placeholder="Tugas baru..." />
-    <button onclick={handleSubmit}>{editingId ? 'Update' : 'Simpan'}</button>
+    <input bind:value={todoApp.inputTitle} placeholder="Tugas baru..." />
+    
+    <button onclick={() => todoApp.handleSubmit()}>
+      {todoApp.editingId ? 'Update' : 'Simpan'}
+    </button>
+
+    {#if todoApp.editingId}
+      <button onclick={() => todoApp.cancelEdit()}>Batal</button>
+    {/if}
   </div>
 
   <hr />
-
-  <Home onEdit={startEdit} /> 
-</main>
-
-<style>
-  .input-group { display: flex; gap: 8px; }
-  .btn-update { background: #ffc107 !important; color: black !important; }
-  .btn-cancel { background: #6c757d; color: white; border: none; padding: 10px; border-radius: 4px; }
-  /* style lainnya tetap sama */
-</style>
+  <Home /> </main>
