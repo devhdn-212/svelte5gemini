@@ -2,64 +2,49 @@
   import { Toaster } from 'svelte-sonner';
   import { ApiTodoRepository } from "./data/api-repository";
   import { createTodoStore } from "./presentation/todo-store.svelte";
+  import { setTodoContext } from "./presentation/todo-context";
   import Home from "./Home.svelte";
 
   const repo = new ApiTodoRepository();
   const todoApp = createTodoStore(repo);
 
-  let inputTitle = $state("");
-  let editingId = $state<number | null>(null); // State untuk melacak mode edit
+  // Bagikan store ke seluruh anak komponen
+  setTodoContext(todoApp);
 
+  let inputTitle = $state("");
+  let editingId = $state<number | null>(null);
+
+  // Logic input tetap di sini karena ini urusan Form di App.svelte
   async function handleSubmit() {
-    if (editingId !== null) {
-      // Mode Edit
-      if (await todoApp.update(editingId, inputTitle)) {
-        cancelEdit();
-      }
-    } else {
-      // Mode Tambah
-      if (await todoApp.add(inputTitle)) {
-        inputTitle = "";
-      }
+    const success = editingId !== null 
+      ? await todoApp.update(editingId, inputTitle)
+      : await todoApp.add(inputTitle);
+      
+    if (success) {
+      inputTitle = "";
+      editingId = null;
     }
   }
 
-  function startEdit(todo: {id: number, title: string}) {
+  function startEdit(todo: any) {
     editingId = todo.id;
     inputTitle = todo.title;
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // Opsional: scroll ke atas
-  }
-
-  function cancelEdit() {
-    editingId = null;
-    inputTitle = "";
   }
 </script>
 
-<Toaster position="top-right" richColors />
+<Toaster richColors />
 
 <main>
-  <h1>Todo Manager</h1>
-
-  <section class="input-group">
-    <input bind:value={inputTitle} placeholder="Nama tugas..." />
-    <button onclick={handleSubmit} class:btn-update={editingId !== null}>
-      {editingId !== null ? "Update" : "Simpan"}
-    </button>
-    {#if editingId !== null}
-      <button onclick={cancelEdit} class="btn-cancel">Batal</button>
-    {/if}
-  </section>
+  <h1>Clean Arch + Context API</h1>
+  
+  <div class="form">
+    <input bind:value={inputTitle} placeholder="Tugas baru..." />
+    <button onclick={handleSubmit}>{editingId ? 'Update' : 'Simpan'}</button>
+  </div>
 
   <hr />
 
-  <Home 
-    items={todoApp.items} 
-    isLoading={todoApp.loading} 
-    onRefresh={() => todoApp.load()} 
-    onDelete={(id) => todoApp.remove(id)}
-    onEdit={startEdit} 
-  />
+  <Home onEdit={startEdit} /> 
 </main>
 
 <style>

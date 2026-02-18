@@ -1,32 +1,39 @@
 <script lang="ts">
-  import type { Todo } from "../../core/todo";
+  import { useTodoContext } from "./presentation/todo-context";
 
-  let { items, isLoading, onRefresh, onDelete, onEdit } = $props<{
-    items: Todo[],
-    isLoading: boolean,
-    onRefresh: () => void,
-    onDelete: (id: number) => void,
-    onEdit: (todo: Todo) => void
-  }>();
+  // Ambil store dari context
+  const todoApp = useTodoContext();
+  
+  // Ambil prop onEdit saja (karena ini interaksi antar UI)
+  let { onEdit } = $props<{ onEdit: (todo: any) => void }>();
+
+  $effect(() => {
+    // Load data saat komponen pertama kali muncul
+    todoApp.load();
+  });
 </script>
 
-<div class="home-container">
+<div class="home">
   <div class="header">
     <h2>Daftar Tugas</h2>
-    <button onclick={onRefresh}>Refresh</button>
+    <button onclick={() => todoApp.load()}>Refresh</button>
   </div>
 
-  <ul>
-    {#each items as todo (todo.id)}
-      <li>
-        <span>{todo.title}</span>
-        <div class="actions">
-          <button class="btn-edit" onclick={() => onEdit(todo)}>Edit</button>
-          <button class="btn-delete" onclick={() => onDelete(todo.id)}>Delete</button>
-        </div>
-      </li>
-    {/each}
-  </ul>
+  {#if todoApp.loading}
+    <p>Loading...</p>
+  {:else}
+    <ul>
+      {#each todoApp.items as todo (todo.id)}
+        <li>
+          <span>{todo.title}</span>
+          <div class="btns">
+            <button onclick={() => onEdit(todo)}>Edit</button>
+            <button onclick={() => todoApp.remove(todo.id)}>Hapus</button>
+          </div>
+        </li>
+      {/each}
+    </ul>
+  {/if}
 </div>
 
 <style>
