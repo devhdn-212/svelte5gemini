@@ -2,69 +2,48 @@
   import { Toaster } from 'svelte-sonner';
   import { ApiTodoRepository } from "./data/api-repository";
   import { createTodoStore } from "./presentation/todo-store.svelte";
+  import { setTodoContext } from "./presentation/todo-context";
   import Home from "./Home.svelte";
 
   const repo = new ApiTodoRepository();
   const todoApp = createTodoStore(repo);
+  setTodoContext(todoApp);
 
-  let inputTitle = $state("");
-  let editingId = $state<number | null>(null); // State untuk melacak mode edit
+  $effect(() => {
+    const handleFocus = () => todoApp.load(false);
+    window.addEventListener('focus', handleFocus);
+  
+    // 1. Load data pertama kali
+    todoApp.load();
 
-  async function handleSubmit() {
-    if (editingId !== null) {
-      // Mode Edit
-      if (await todoApp.update(editingId, inputTitle)) {
-        cancelEdit();
-      }
-    } else {
-      // Mode Tambah
-      if (await todoApp.add(inputTitle)) {
-        inputTitle = "";
-      }
-    }
-  }
+    // 2. Jalankan Auto-Refresh setiap 30 detik
+    const stopPolling = todoApp.startPolling(30000);
 
-  function startEdit(todo: {id: number, title: string}) {
-    editingId = todo.id;
-    inputTitle = todo.title;
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // Opsional: scroll ke atas
-  }
-
-  function cancelEdit() {
-    editingId = null;
-    inputTitle = "";
-  }
+    // 3. Svelte 5 Cleanup: Otomatis berhenti jika user pindah halaman/tutup app
+    return () => {
+      stopPolling();
+      window.removeEventListener('focus', handleFocus);
+    };
+  });
 </script>
 
-<Toaster position="top-right" richColors />
+<Toaster richColors />
 
 <main>
-  <h1>Todo Manager</h1>
-
-  <section class="input-group">
-    <input bind:value={inputTitle} placeholder="Nama tugas..." />
-    <button onclick={handleSubmit} class:btn-update={editingId !== null}>
-      {editingId !== null ? "Update" : "Simpan"}
+  <h1>Clean Arch Ultimate</h1>
+  <h2>Todo Auto-Sync 🔄</h2>
+  
+  <div class="form">
+    <input bind:value={todoApp.inputTitle} placeholder="Tugas baru..." />
+    
+    <button onclick={() => todoApp.handleSubmit()}>
+      {todoApp.editingId ? 'Update' : 'Simpan'}
     </button>
-    {#if editingId !== null}
-      <button onclick={cancelEdit} class="btn-cancel">Batal</button>
+
+    {#if todoApp.editingId}
+      <button onclick={() => todoApp.cancelEdit()}>Batal</button>
     {/if}
-  </section>
+  </div>
 
   <hr />
-
-  <Home 
-    items={todoApp.items} 
-    isLoading={todoApp.loading} 
-    onRefresh={() => todoApp.load()} 
-    onDelete={(id) => todoApp.remove(id)}
-    onEdit={startEdit} 
-  />
-</main>
-
-<style>
-  .input-group { display: flex; gap: 8px; }
-  .btn-update { background: #ffc107 !important; color: black !important; }
-  .btn-cancel { background: #6c757d; color: white; border: none; padding: 10px; border-radius: 4px; }
-  /* style lainnya tetap sama */
-</style>
+  <Home /> </main>

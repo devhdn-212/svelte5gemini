@@ -8,85 +8,109 @@ const todoSchema = z.string()
 
 export function createTodoStore(repo: TodoRepository) {
   let items = $state<Todo[]>([]);
-  let loading = $state(true); // Default true untuk skeleton
+  let loading = $state(false);
+  let inputTitle = $state("");
+  let editingId = $state<number | null>(null);
 
-  // --- CARA 3: PERSISTENCE (LocalStorage) ---
-  // Load dari localStorage saat pertama kali store dibuat
-  const saved = localStorage.getItem('todos-cache');
-  if (saved) items = JSON.parse(saved);
+  // Helper untuk ambil data lokal (agar tidak hilang saat refresh)
+  const getLocalData = (): Todo[] => {
+    const saved = localStorage.getItem('local_todos');
+    return saved ? JSON.parse(saved) : [];
+  };
 
-  // Helper untuk simpan ke storage tiap ada perubahan items
-  $effect(() => {
-    localStorage.setItem('todos-cache', JSON.stringify(items));
-  });
+  const saveLocalData = (data: Todo[]) => {
+    localStorage.setItem('local_todos', JSON.stringify(data));
+  };
 
   return {
     get items() { return items; },
     get loading() { return loading; },
+    get inputTitle() { return inputTitle; },
+    set inputTitle(val: string) { inputTitle = val; },
+    get editingId() { return editingId; },
 
-    async load() {
-      loading = true;
+    async load(showLoading = true) {
+      if (showLoading) loading = true;
       try {
-        const data = await repo.getAll();
-        items = data;
+        // 1. Ambil data dari API
+        const apiData = await repo.getAll();
+        
+        // 2. Ambil data dari LocalStorage (buah apel yang kamu input tadi)
+        const localData = getLocalData();
+
+        // 3. Gabungkan keduanya (Lokal di atas agar terlihat baru)
+        items = [...localData, ...apiData];
       } catch (e) {
-        toast.error("Gagal sinkronisasi dengan server");
+        console.error("Sync failed");
       } finally {
-        loading = false;
+        if (showLoading) loading = false;
       }
     },
 
-    async add(title: string) {
-      const result = todoSchema.safeParse(title);
-      if (!result.success) {
-        toast.error(result.error.errors[0].message);
-        return false;
-      }
+    async handleSubmit() {
+      if (!inputTitle.trim()) return;
 
       try {
-        const newTodo = await repo.create(title);
-        // Tambahkan ke state
-        items = [...items, { ...newTodo, id: Date.now() }];
-        toast.success("Data berhasil disimpan");
-        return true;
+        if (editingId !== null) {
+          // --- LOGIKA UPDATE ---
+          items = items.map(t => t.id === editingId ? { ...t, title: inputTitle } : t);
+          
+          // Update juga di lokal jika itu data lokal
+          const localData = getLocalData().map(t => t.id === editingId ? { ...t, title: inputTitle } : t);
+          saveLocalData(localData);
+          
+          toast.success("Berhasil diupdate");
+        } else {
+          // --- LOGIKA ADD ---
+          // Kita tetap panggil API (simulasi)
+          const newTodo = await repo.create(inputTitle);
+          
+          // Buat ID unik agar tidak bentrok
+          const localTodo = { ...newTodo, id: Date.now(), title: inputTitle };
+          
+          // Simpan ke LocalStorage agar tidak hilang saat refresh
+          const updatedLocal = [localTodo, ...getLocalData()];
+          saveLocalData(updatedLocal);
+
+          // Update State UI
+          items = [localTodo, ...items];
+          toast.success("Berhasil disimpan ke lokal & API");
+        }
+        this.cancelEdit();
       } catch (e) {
-        toast.error("Gagal simpan ke server");
-        return false;
+        toast.error("Gagal menyimpan");
       }
     },
 
-    // --- CARA 2: OPTIMISTIC UI (Delete) ---
     async remove(id: number) {
-      const previousItems = [...items]; // Backup data jika gagal
-      
-      // Hapus langsung di UI (Optimistic)
+      // Hapus dari state UI
       items = items.filter(t => t.id !== id);
       
-      try {
-        await repo.delete(id);
-        toast.success("Data berhasil didelete");
-      } catch (e) {
-        // Jika API Gagal, kembalikan data yang dihapus (Rollback)
-        items = previousItems;
-        toast.error("Gagal menghapus di server, data dikembalikan");
-      }
-    },
-    async update(id: number, newTitle: string) {
-      const result = todoSchema.safeParse(newTitle);
-      if (!result.success) {
-        toast.error(result.error.errors[0].message);
-        return false;
-      }
+      // Hapus dari LocalStorage
+      const updatedLocal = getLocalData().filter(t => t.id !== id);
+      saveLocalData(updatedLocal);
 
       try {
-        // Secara teknis API placeholder tidak benar-benar save, tapi kita simulasi di UI
-        items = items.map(t => t.id === id ? { ...t, title: newTitle } : t);
-        toast.success("Data berhasil diupdate");
-        return true;
+        await repo.delete(id);
+        toast.success("Berhasil dihapus");
       } catch (e) {
-        toast.error("Gagal update data");
-        return false;
+        // Kita biarkan terhapus di lokal saja karena API cuma simulasi
       }
     },
+
+    setEditMode(todo: Todo) {
+      editingId = todo.id;
+      inputTitle = todo.title;
+    },
+
+    cancelEdit() {
+      editingId = null;
+      inputTitle = "";
+    },
+
+    startPolling(ms: number) {
+      const interval = setInterval(() => this.load(false), ms);
+      return () => clearInterval(interval);
+    }
   };
 }
