@@ -4,41 +4,51 @@
   import { createTodoStore } from "./presentation/todo-store.svelte";
   import Home from "./Home.svelte";
 
-  // Inisialisasi Store (Logic Center)
   const repo = new ApiTodoRepository();
   const todoApp = createTodoStore(repo);
 
   let inputTitle = $state("");
+  let editingId = $state<number | null>(null); // State untuk melacak mode edit
 
-  // Fungsi untuk refresh data (dipanggil dari Home)
-  async function refreshData() {
-    await todoApp.load();
-  }
-
-  // Handle Input
-  async function handleAdd() {
-    if (await todoApp.add(inputTitle)) {
-      inputTitle = "";
+  async function handleSubmit() {
+    if (editingId !== null) {
+      // Mode Edit
+      if (await todoApp.update(editingId, inputTitle)) {
+        cancelEdit();
+      }
+    } else {
+      // Mode Tambah
+      if (await todoApp.add(inputTitle)) {
+        inputTitle = "";
+      }
     }
   }
 
-  // Load awal
-  $effect(() => {
-    refreshData();
-  });
+  function startEdit(todo: {id: number, title: string}) {
+    editingId = todo.id;
+    inputTitle = todo.title;
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // Opsional: scroll ke atas
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    inputTitle = "";
+  }
 </script>
 
 <Toaster position="top-right" richColors />
 
-<main style="max-width: 500px; margin: 2rem auto; font-family: sans-serif;">
-  <h1>Todo App (Centralized)</h1>
+<main>
+  <h1>Todo Manager</h1>
 
   <section class="input-group">
-    <input 
-      bind:value={inputTitle} 
-      placeholder="Ketik tugas baru (A-Z, 0-9)..." 
-    />
-    <button onclick={handleAdd}>Simpan</button>
+    <input bind:value={inputTitle} placeholder="Nama tugas..." />
+    <button onclick={handleSubmit} class:btn-update={editingId !== null}>
+      {editingId !== null ? "Update" : "Simpan"}
+    </button>
+    {#if editingId !== null}
+      <button onclick={cancelEdit} class="btn-cancel">Batal</button>
+    {/if}
   </section>
 
   <hr />
@@ -46,13 +56,15 @@
   <Home 
     items={todoApp.items} 
     isLoading={todoApp.loading} 
-    onRefresh={refreshData} 
+    onRefresh={() => todoApp.load()} 
     onDelete={(id) => todoApp.remove(id)}
+    onEdit={startEdit} 
   />
 </main>
 
 <style>
-  .input-group { display: flex; gap: 8px; margin-bottom: 20px; }
-  input { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #ccc; }
-  button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+  .input-group { display: flex; gap: 8px; }
+  .btn-update { background: #ffc107 !important; color: black !important; }
+  .btn-cancel { background: #6c757d; color: white; border: none; padding: 10px; border-radius: 4px; }
+  /* style lainnya tetap sama */
 </style>

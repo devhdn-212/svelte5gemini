@@ -70,6 +70,23 @@ export function createTodoStore(repo: TodoRepository) {
         items = previousItems;
         toast.error("Gagal menghapus di server, data dikembalikan");
       }
-    }
+    },
+    async update(id: number, newTitle: string) {
+      const result = todoSchema.safeParse(newTitle);
+      if (!result.success) {
+        toast.error(result.error.errors[0].message);
+        return false;
+      }
+
+      try {
+        // Secara teknis API placeholder tidak benar-benar save, tapi kita simulasi di UI
+        items = items.map(t => t.id === id ? { ...t, title: newTitle } : t);
+        toast.success("Data berhasil diupdate");
+        return true;
+      } catch (e) {
+        toast.error("Gagal update data");
+        return false;
+      }
+    },
   };
 }
